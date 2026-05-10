@@ -1,0 +1,78 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+.venv-*/
+.python-version
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+.cursor/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# Data (большие файлы)
+dataset/
+dataset_8classes/
+real_dataset/
+data_preparation/**/__pycache__/
+**/data/**
+**/datasets/**
+**/dataset/**
+**/*.zip
+*.tar
+*.tar.gz
+dataset_for_colab.tar.gz
+
+# Models (большие файлы)
+*.pt
+*.pth
+*.onnx
+*.engine
+*.torchscript
+runs/
+training/**/runs/
+**/wandb/
+
+# Allow committing the small trained model
+!models/
+!models/best.pt
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Frontend / Node
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Docker
+.docker/
+
+# Environment
+.env
+.env.local
+.env.*.local
+

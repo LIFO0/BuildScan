@@ -1,0 +1,516 @@
+# 🔌 Мониторинг состояния виброгасителей, изоляторов и траверсов ЛЭП
+
+Полнофункциональная система для автоматизированного анализа состояния критически важных элементов линий электропередачи на основе компьютерного зрения (YOLOv8).
+
+## 🎯 Возможности
+
+- ✅ **Детекция 8 классов объектов**: виброгасители, изоляторы (5 типов), траверсы, гнёзда, таблички безопасности
+- ✅ **Аутентификация и авторизация** (JWT)
+- ✅ **Асинхронная пакетная обработка** изображений через RabbitMQ
+- ✅ **История анализов** с сохранением результатов
+- ✅ **Управление файлами** (загрузка, хранение, удаление)
+- ✅ **Визуализация результатов** с bounding boxes и цветовой кодировкой
+- ✅ **Настройка порога уверенности** детекций
+- ✅ **Статистика по категориям** и фильтрация результатов
+- ✅ **Адаптивный UI** на TypeScript + React
+
+---
+
+## 🏗️ Архитектура
+
+Микросервисная архитектура (монорепозиторий) с разделением ответственности:
+
+```
+                           ┌─────────────────┐
+                           │   Nginx (80)    │  Реверс-прокси
+                           └────────┬────────┘
+                                    │
+                    ┌───────────────┼───────────────┐
+                    │                               │
+         ┌──────────▼─────────┐        ┌───────────▼──────────┐
+         │  Frontend Service  │        │   BFF Service (8000) │
+         │  React + TypeScript│        │   FastAPI Gateway    │
+         └────────────────────┘        └───────────┬──────────┘
+                                                    │
+                    ┌───────────────────────────────┼─────────────────────────┐
+                    │                               │                         │
+         ┌──────────▼─────────┐        ┌───────────▼──────────┐  ┌──────────▼─────────┐
+         │  Auth Service      │        │  Files Service       │  │ YOLOv8 Model       │
+         │  JWT + PostgreSQL  │        │  Storage + PostgreSQL│  │ Detection Service  │
+         └────────────────────┘        └──────────────────────┘  └────────────────────┘
+                                                    │
+                                         ┌──────────▼──────────┐
+                                         │   RabbitMQ          │
+                                         │   Message Broker    │
+                                         └──────────┬──────────┘
+                                                    │
+                                         ┌──────────▼──────────┐
+                                         │  Analysis Worker    │
+                                         │  Async Processing   │
+                                         └─────────────────────┘
+```
+
+### Сервисы
+
+| Сервис | Порт | Описание |
+|--------|------|----------|
+| **nginx** | 80 | Реверс-прокси, раздача статики фронтенда |
+| **frontend-service** | - | React + TypeScript UI |
+| **bff-service** | 8000 | API Gateway, оркестрация запросов |
+| **auth-service** | 8002 | Аутентификация, управление пользователями |
+| **files-service** | 8006 | Хранилище файлов |
+| **yolov8-model-service** | 8000 (internal) | YOLOv8 детекция объектов |
+| **analysis-worker** | - | Воркер для фоновой обработки через RabbitMQ |
+| **postgres-db** | 5432 | БД для auth + bff (анализы) |
+| **postgres-files** | 5432 | БД для files-service |
+| **rabbitmq** | 5672, 15672 | Очереди задач, управление через http://localhost:15672 |
+
+---
+
+## 📦 Структура проекта (Монорепозиторий)
+
+```
+MonitoringTheConditionOfVibrationDampers/
+├── data_preparation/               # Подготовка датасета
+│   ├── convert_coco_to_yolo_8classes.py
+│   ├── prepare_8class_dataset.py
+│   └── split_dataset.py
+│
+├── dataset_8classes/               # Датасет YOLOv8 (8 классов)
+│   ├── images/                    # train/val/test
+│   ├── labels/                    # train/val/test
+│   └── dataset_8classes.yaml      # Конфигурация датасета
+│
+├── notebooks/                      # Jupyter notebooks
+│   └── train_yolov8_8classes.ipynb # Обучение модели (Colab)
+│
+├── models/                         # Обученные модели
+│   └── best.pt                    # YOLOv8 модель (8 классов)
+│
+├── frontend-service/               # React + TypeScript UI
+│   ├── src/
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   ├── Dockerfile
+│   ├── package.json
+│   └── vite.config.ts
+│
+├── bff-service/                    # API Gateway
+│   ├── app/
+│   │   ├── api/                   # Endpoints (auth, files, predict, analysis)
+│   │   ├── core/                  # Конфигурация
+│   │   ├── db/                    # База данных
+│   │   ├── models/                # SQLAlchemy модели
+│   │   ├── schemas/               # Pydantic схемы
+│   │   ├── services/              # Бизнес-логика
+│   │   └── workers/               # Analysis worker
+│   ├── alembic/                   # Миграции БД
+│   ├── Dockerfile
+│   └── requirements.txt
+│
+├── auth-service/                   # Сервис аутентификации
+│   ├── app/
+│   │   ├── api/                   # Auth endpoints
+│   │   ├── core/                  # JWT, конфигурация
+│   │   ├── models.py              # User модель
+│   │   └── utils/                 # Password hashing
+│   ├── Dockerfile
+│   └── requirements.txt
+│
+├── files-service/                  # Файловое хранилище
+│   ├── app/
+│   │   ├── crud.py
+│   │   ├── models.py              # File metadata модель
+│   │   └── schemas.py
+│   ├── alembic/                   # Миграции БД
+│   ├── Dockerfile
+│   └── requirements.txt
+│
+├── yolov8-model-service/           # YOLOv8 детекция
+│   ├── app/
+│   │   └── main.py                # FastAPI + YOLOv8
+│   ├── Dockerfile
+│   └── requirements.txt
+│
+├── infrastructure/
+│   └── nginx/
+│       └── default.conf           # Nginx конфигурация
+│
+├── docker-compose.yml              # Оркестрация всех сервисов
+├── Makefile                        # Команды управления
+├── dataset_8classes.yaml           # YOLOv8 конфиг (8 классов)
+└── README.md
+```
+
+---
+
+## 🚀 Быстрый старт
+
+### Требования
+
+- Docker + Docker Compose
+- (Для обучения) Google Colab с GPU
+- (Для локальной разработки) Python 3.11+, Node.js 18+
+
+### 1. Клонирование и настройка
+
+```bash
+git clone <repository-url>
+cd MonitoringTheConditionOfVibrationDampers
+
+# Создайте .env файл (опционально, есть значения по умолчанию)
+cat > .env << EOF
+SECRET_KEY=your-secret-key-here
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=postgres-db
+POSTGRES_FILES_DB=files_db
+EOF
+```
+
+### 2. Запуск всех сервисов через Docker Compose
+
+```bash
+# Сборка и запуск
+docker-compose up --build
+
+# Или через Makefile
+make build
+make up
+```
+
+### 3. Доступ к сервисам
+
+После запуска откройте браузер:
+
+- **Frontend**: http://localhost
+- **API Gateway (BFF)**: http://localhost:8000
+- **RabbitMQ Management**: http://localhost:15672 (guest/guest)
+
+### 4. Первый запуск: регистрация пользователя
+
+```bash
+curl -X POST http://localhost:8000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "username": "testuser",
+    "password": "password123"
+  }'
+```
+
+---
+
+## 🎓 Обучение модели YOLOv8 (8 классов)
+
+### Шаг 1: Подготовка датасета
+
+```bash
+# Конвертация COCO → YOLO формат
+python data_preparation/convert_coco_to_yolo_8classes.py
+
+# Создание train/val/test split (80/10/10)
+python data_preparation/prepare_8class_dataset.py
+
+# Создание архива для Google Drive
+cp dataset_8classes.yaml dataset_8classes/
+tar -czf dataset_8classes_for_colab.tar.gz dataset_8classes/
+```
+
+### Шаг 2: Загрузка в Google Drive
+
+Загрузите `dataset_8classes_for_colab.tar.gz` в:
+- `MyDrive/Atest/`
+
+(Опционально) Загрузите предыдущую модель для transfer learning
+
+### Шаг 3: Обучение в Google Colab
+
+1. Откройте `notebooks/train_yolov8_8classes.ipynb` в Colab
+2. Включите GPU: Runtime → Change runtime type → GPU (T4/V100/A100)
+3. Выполните все ячейки
+4. Скачайте `best.pt` и поместите в `models/`
+
+### Целевые метрики
+
+- **mAP@0.5 ≥ 0.85** (высокий приоритет)
+- Устойчивость к теням, бликам, перекрытиям
+- Детекция малых объектов (<30 пикселей)
+
+---
+
+## 🔧 Управление через Makefile
+
+```bash
+make build       # Собрать Docker образы
+make up          # Запустить все сервисы
+make down        # Остановить все сервисы
+make restart     # Перезапустить все сервисы
+make logs        # Показать логи всех сервисов
+make clean       # Удалить контейнеры и volumes (осторожно!)
+```
+
+---
+
+## 📡 API Endpoints
+
+### BFF Service (http://localhost:8000)
+
+#### Аутентификация
+- `POST /api/auth/register` - Регистрация
+- `POST /api/auth/login` - Вход (получение JWT)
+- `GET /api/auth/me` - Информация о текущем пользователе
+
+#### Файлы
+- `POST /api/files/upload` - Загрузка файла
+- `GET /api/files/{file_id}` - Получение файла
+- `DELETE /api/files/{file_id}` - Удаление файла
+
+#### Детекция
+- `POST /api/predict?conf=0.25` - Детекция на одном изображении
+- `POST /api/analysis/batch` - Запуск пакетной обработки (асинхронно)
+
+#### Анализы
+- `GET /api/analysis/tasks` - Список всех задач анализа
+- `GET /api/analysis/tasks/{task_id}` - Детали задачи
+- `GET /api/analysis/tasks/{task_id}/detections` - Результаты детекций
+
+#### Здоровье
+- `GET /health` - Проверка состояния сервисов
+
+---
+
+## 🎨 Детектируемые классы (8)
+
+| ID | Класс | Описание | Критичность |
+|----|-------|----------|-------------|
+| 0 | `vibration_damper` | Виброгаситель | Средняя |
+| 1 | `festoon_insulators` | Гирлянда изоляторов (стекло) | Средняя |
+| 2 | `traverse` | Траверса | Средняя |
+| 3 | `bad_insulator` | Отсутствующий изолятор | **Критическая** |
+| 4 | `damaged_insulator` | Поврежденный изолятор | **Высокая** |
+| 5 | `polymer_insulators` | Полимерные изоляторы | Средняя |
+| 6 | `nest` | Гнездо на траверсах | Средняя |
+| 7 | `safety_sign` | Табличка безопасности | Низкая |
+
+---
+
+## 💾 База данных
+
+### PostgreSQL (postgres-db)
+- **auth-service**: таблица `users`
+- **bff-service**: таблицы `analysis_tasks`, `detections`
+
+### PostgreSQL (postgres-files)
+- **files-service**: таблица `files` (метаданные файлов)
+
+### Миграции
+
+```bash
+# BFF Service
+cd bff-service
+alembic upgrade head
+
+# Files Service
+cd files-service
+alembic upgrade head
+```
+
+---
+
+## 🔐 Аутентификация
+
+Система использует JWT токены:
+
+1. Зарегистрируйтесь: `POST /api/auth/register`
+2. Войдите: `POST /api/auth/login` → получите `access_token`
+3. Используйте токен в заголовке: `Authorization: Bearer <token>`
+
+---
+
+## ⚙️ Переменные окружения
+
+| Переменная | Значение по умолчанию | Описание |
+|------------|----------------------|----------|
+| `SECRET_KEY` | `your-secret-key-here` | Секретный ключ для JWT |
+| `POSTGRES_USER` | `postgres` | PostgreSQL пользователь |
+| `POSTGRES_PASSWORD` | `postgres` | PostgreSQL пароль |
+| `POSTGRES_DB` | `postgres-db` | БД для auth/bff |
+| `POSTGRES_FILES_DB` | `files_db` | БД для files-service |
+| `MAX_BATCH_FILES` | `50000` | Макс. файлов в пакете |
+| `MAX_BATCH_SIZE_BYTES` | `10737418240` (10GB) | Макс. размер пакета |
+| `PREVIEW_LIMIT` | `10` | Лимит превью детекций |
+| `MAX_YOLO_FILE_SIZE_MB` | `512` | Макс. размер файла для YOLO |
+
+---
+
+## 🛠️ Локальная разработка (без Docker)
+
+### Frontend
+
+```bash
+cd frontend-service
+npm install
+npm run dev  # http://localhost:5173
+```
+
+### BFF Service
+
+```bash
+cd bff-service
+pip install -r requirements.txt
+export AUTH_SERVICE_URL=http://localhost:8002
+export FILES_SERVICE_URL=http://localhost:8006
+export YOLOV8_SERVICE_URL=http://localhost:8001
+export ANALYSIS_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/postgres-db
+python -m app.main  # http://localhost:8000
+```
+
+### Auth Service
+
+```bash
+cd auth-service
+pip install -r requirements.txt
+export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres-db
+python -m app.main  # http://localhost:8002
+```
+
+### Files Service
+
+```bash
+cd files-service
+pip install -r requirements.txt
+export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/files_db
+python main.py  # http://localhost:8006
+```
+
+### YOLOv8 Model Service
+
+```bash
+cd yolov8-model-service
+pip install -r requirements.txt
+export MODEL_PATH=../models/best.pt
+python -m app.main  # http://localhost:8001
+```
+
+### Analysis Worker
+
+```bash
+cd bff-service
+python -m app.workers.analysis_worker
+```
+
+---
+
+## 🐛 Troubleshooting
+
+### Проблема: "Model not found"
+
+```bash
+# Убедитесь, что модель существует
+ls -lh models/best.pt
+
+# Если нет - скачайте или обучите новую модель
+```
+
+### Проблема: "Database connection failed"
+
+```bash
+# Проверьте статус PostgreSQL
+docker-compose ps postgres-db postgres-files
+
+# Пересоздайте контейнеры
+docker-compose down -v
+docker-compose up --build
+```
+
+### Проблема: "RabbitMQ connection refused"
+
+```bash
+# Проверьте статус RabbitMQ
+docker-compose ps rabbitmq
+
+# Перезапустите RabbitMQ
+docker-compose restart rabbitmq
+```
+
+### Посмотреть логи
+
+```bash
+# Все сервисы
+docker-compose logs -f
+
+# Конкретный сервис
+docker-compose logs -f bff-service
+docker-compose logs -f yolov8-model-service
+```
+
+---
+
+## 📚 Технологии
+
+### Backend
+- **Python 3.11**
+- **FastAPI** - современный веб-фреймворк
+- **SQLAlchemy** - ORM для работы с БД
+- **Alembic** - миграции БД
+- **Pika** - клиент RabbitMQ
+- **YOLOv8 (Ultralytics)** - модель детекции объектов
+- **JWT** - аутентификация
+
+### Frontend
+- **React 18**
+- **TypeScript**
+- **Vite** - сборщик
+- **TailwindCSS** (вероятно) - стилизация
+
+### Infrastructure
+- **Docker + Docker Compose** - контейнеризация
+- **PostgreSQL 15** - реляционная БД
+- **RabbitMQ 3** - брокер сообщений
+- **Nginx** - реверс-прокси
+
+### ML/AI
+- **YOLOv8 Large** - object detection
+- **Google Colab** - обучение модели
+- **Transfer Learning** - дообучение с предыдущих моделей
+
+---
+
+## 📊 Метрики производительности
+
+- **Скорость детекции**: ~50-100ms на изображение (GPU)
+- **Throughput**: до 10 изображений/сек (зависит от GPU)
+- **Размер модели**: ~83MB (YOLOv8l)
+- **Точность (mAP@0.5)**: ≥ 0.85 (целевая метрика)
+
+---
+
+## 🔮 Roadmap
+
+- [ ] Добавление поддержки видео (покадровый анализ)
+- [ ] Dashboard с аналитикой и графиками
+- [ ] Экспорт отчётов (PDF, Excel)
+- [ ] Интеграция с дронами и камерами
+- [ ] Мобильное приложение
+- [ ] Telegram/Email уведомления о критических дефектах
+
+---
+
+## 📄 Лицензия
+
+MIT License (или укажите вашу лицензию)
+
+---
+
+## 👥 Авторы
+
+- German Mironchuc
+
+---
+
+## 🙏 Благодарности
+
+- [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics)
+- [FastAPI](https://fastapi.tiangolo.com/)
+- [React](https://react.dev/)

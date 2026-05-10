@@ -1,0 +1,38 @@
+path: ./data/building_defects
+
+# Expected structure:
+# data/building_defects/
+#   images/
+#     train/
+#     val/
+#     test/        # optional
+#   labels/
+#     train/
+#     val/
+#     test/        # optional
+#
+# Label format: YOLO (txt) with lines: <class_id> <x_center> <y_center> <w> <h>
+# normalized to [0..1]
+
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: crack_diagonal
+  1: crack_vertical
+  2: crack_horizontal
+  3: crack_hairline
+  4: plaster_peeling
+  5: brick_damage
+  6: corrosion
+  7: mold
+  8: moisture_stain
+  9: concrete_spalling
+  10: deformation
+
+# IMPORTANT:
+# "no_defect" should NOT be a detection class in YOLO.
+# For images with no defects, simply provide an empty label file.
+# The application will output "no_defect" when detections are empty.
+
