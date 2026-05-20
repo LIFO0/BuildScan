@@ -4,6 +4,7 @@ import { Virtuoso } from "react-virtuoso";
 import Breadcrumbs from "./Breadcrumbs";
 import PhotoThumbnails from "./PhotoThumbnails";
 import ImageAnnotationTool from "./ImageAnnotationTool";
+import ImageWithDefectOverlay from "./ImageWithDefectOverlay";
 import MetricsCard from "./MetricsCard";
 import { getNotBuildingMessage, getNotBuildingBannerTitle, isNotBuildingPhoto } from "@/shared/analysisScene";
 
@@ -468,6 +469,7 @@ export default function AnalysisHistoryContents({
   const [viewMode, setViewMode] = useState<'original' | 'result'>('original');
   const [, setShowMetricsPanel] = useState<boolean>(false);
   const [isAnnotationMode, setIsAnnotationMode] = useState<boolean>(false);
+  const [highlightedMetricIndex, setHighlightedMetricIndex] = useState<number | null>(null);
 
   const BFF_SERVICE_URL = (import.meta as any).env?.VITE_BFF_SERVICE_URL;
 
@@ -494,6 +496,7 @@ export default function AnalysisHistoryContents({
     setSelectedImageForView(null);
     setSelectedImageIndex(null);
     setShowMetricsPanel(false);
+    setHighlightedMetricIndex(null);
   }, []);
 
   // Сохраняем функцию закрытия для использования извне
@@ -854,9 +857,10 @@ export default function AnalysisHistoryContents({
 
   // Если открыт просмотр - показываем только просмотр
   if (selectedImageForView && selectedImageIndex !== null) {
-    const currentImageUrl = viewMode === 'original'
-      ? resolveImageUrl(selectedImageForView.original_url)
-      : resolveImageUrl(selectedImageForView.result_url);
+    const currentImageUrl = resolveImageUrl(selectedImageForView.original_url);
+    const detectionsForOverlay = selectedImageForView.summary?.detections || [];
+    const hasDetections = detectionsForOverlay.length > 0;
+    const showDefectOverlay = viewMode === "result" && hasDetections;
 
     const notBuildingMsg = getNotBuildingMessage(selectedImageForView.summary);
 
@@ -878,7 +882,7 @@ export default function AnalysisHistoryContents({
         style={{ padding: '48px 96px' }}
       >
         {/* Просмотр изображения и метрики */}
-        <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+        <div className="flex-1 flex flex-col gap-4 min-h-0 overflow-hidden">
           {notBuildingMsg ? (
             <div
               className="shrink-0 w-full rounded-xl border border-amber-400/45 bg-amber-950/50 px-4 py-3 text-amber-50"
@@ -890,15 +894,16 @@ export default function AnalysisHistoryContents({
               <p className="text-sm leading-relaxed text-amber-50/95">{notBuildingMsg}</p>
             </div>
           ) : null}
-          {/* Контейнер изображения */}
-          <div className="flex-1 flex items-center justify-center overflow-hidden relative">
+          {/* Контейнер изображения — сохраняет высоту при появлении панели результатов */}
+          <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden relative w-full">
             {currentImageUrl ? (
-              <div className="relative inline-block max-w-full max-h-full">
-                <img
+              <div className="relative h-full w-full max-h-full max-w-full flex items-center justify-center">
+                <ImageWithDefectOverlay
                   src={currentImageUrl}
                   alt={selectedImageForView.file_name}
-                  className="object-contain"
-                  style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto' }}
+                  detections={detectionsForOverlay}
+                  showOverlay={showDefectOverlay}
+                  highlightedIndex={highlightedMetricIndex}
                 />
 
                 {/* PhotoThumbnails компонент - по центру сверху на фотографии */}
@@ -913,6 +918,7 @@ export default function AnalysisHistoryContents({
                     onSelectImage={(_file, index) => {
                       setSelectedImageIndex(index);
                       setSelectedImageForView(sortedImages[index]);
+                      setHighlightedMetricIndex(null);
                     }}
                     onRemoveImage={handleRemoveImageFromView}
                     onLoadPreview={() => {}} // Превью уже загружены
@@ -920,6 +926,7 @@ export default function AnalysisHistoryContents({
                     onSelect={(index) => {
                       setSelectedImageIndex(index);
                       setSelectedImageForView(sortedImages[index]);
+                      setHighlightedMetricIndex(null);
                     }}
                   />
                 </motion.div>
@@ -932,6 +939,7 @@ export default function AnalysisHistoryContents({
                       onClick={() => {
                         setViewMode('original');
                         setShowMetricsPanel(false);
+                        setHighlightedMetricIndex(null);
                       }}
                       className={`px-3 py-1.5 rounded-md transition-colors text-sm ${
                         viewMode === 'original'
@@ -946,11 +954,11 @@ export default function AnalysisHistoryContents({
                         setViewMode('result');
                         setShowMetricsPanel(true);
                       }}
-                      disabled={!selectedImageForView.result_url}
+                      disabled={!hasDetections}
                       className={`px-3 py-1.5 rounded-md transition-colors text-sm ${
                         viewMode === 'result'
                           ? 'bg-white/20 text-white'
-                          : selectedImageForView.result_url
+                          : hasDetections
                           ? 'text-white/60 hover:bg-white/10'
                           : 'text-white/30 cursor-not-allowed'
                       }`}
@@ -995,20 +1003,16 @@ export default function AnalysisHistoryContents({
             )}
           </div>
 
-          {/* Карточки метрик под изображением - скроллируемые */}
-          <div style={{ minHeight: '180px', display: 'flex', alignItems: 'flex-end', width: '100%' }}>
-            {(() => {
-              const detections = selectedImageForView?.summary?.detections || [];
-              const hasDetections = detections.length > 0;
-              const hasResultUrl = !!selectedImageForView?.result_url;
-              return viewMode === 'result' && hasDetections && hasResultUrl;
-            })() ? (
+          {/* Панель результатов — не сжимает фото, прокручивается отдельно */}
+          {viewMode === "result" && (hasDetections || selectedImageForView?.summary?.report) && (
+            <div className="shrink-0 w-full max-h-[38vh] min-h-0 overflow-y-auto flex flex-col gap-4">
+            {hasDetections ? (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 20 }}
                 transition={{ duration: 0.3 }}
-                className="w-full"
+                className="w-full shrink-0"
               >
                 <div
                   className="flex gap-4 border border-solid border-white/20 rounded-[14px] p-[8px] overflow-x-auto"
@@ -1023,7 +1027,7 @@ export default function AnalysisHistoryContents({
                   const detections = selectedImageForView.summary.detections;
 
                   // Преобразуем детекции в формат метрик
-                  const metrics = detections.map((detection: any) => {
+                  const metrics = detections.map((detection: any, sourceIndex: number) => {
                     const defectSummary = detection.defect_summary || {};
                     let defectType = 'normal';
                     if (defectSummary.type && defectSummary.type !== 'Норма') {
@@ -1031,6 +1035,7 @@ export default function AnalysisHistoryContents({
                     }
 
                     return {
+                      sourceIndex,
                       detection_id: detection.detection_id,
                       class_name: detection.class || '',
                       class_name_ru: detection.class_ru || detection.class || '',
@@ -1065,18 +1070,21 @@ export default function AnalysisHistoryContents({
                     return 0;
                   })
                   .map((metric, index) => (
-                    <MetricsCard key={`metric-${index}`} metric={metric} index={index} />
+                    <div
+                      key={`metric-${metric.sourceIndex}-${index}`}
+                      onMouseEnter={() => setHighlightedMetricIndex(metric.sourceIndex)}
+                      onMouseLeave={() => setHighlightedMetricIndex(null)}
+                    >
+                      <MetricsCard metric={metric} index={index} />
+                    </div>
                   ))}
                 </div>
               </motion.div>
-            ) : (
-              <div></div>
-            )}
-          </div>
+            ) : null}
 
           {/* Карточка анализа (6 блоков) */}
-          {viewMode === 'result' && selectedImageForView?.summary?.report && (
-            <div className="w-full mt-4 border border-white/20 rounded-[14px] bg-white/5 backdrop-blur-sm p-4 max-h-[45vh] overflow-y-auto">
+          {selectedImageForView?.summary?.report && (
+            <div className="w-full shrink-0 border border-white/20 rounded-[14px] bg-white/5 backdrop-blur-sm p-4">
               <p className="font-bold text-lg mb-3">Карточка анализа</p>
 
               {(() => {
@@ -1180,6 +1188,8 @@ export default function AnalysisHistoryContents({
                   </div>
                 );
               })()}
+            </div>
+          )}
             </div>
           )}
         </div>
