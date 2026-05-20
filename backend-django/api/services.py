@@ -30,7 +30,7 @@ def _send_task_update(task: AnalysisTask):
 
 def start_processing(task_id):
     """
-    Локальная обработка без Docker/очередей:
+    Локальная обработка задачи (без внешней очереди):
     - берем загруженные файлы из БД
     - отправляем в yolov8-model-service (http://localhost:8001/predict)
     - сохраняем summary (detections/statistics/report) в TaskImage.summary

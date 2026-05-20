@@ -25,7 +25,7 @@ export default defineConfig({
       usePolling: true,
     },
     proxy: {
-      // Прокси для API запросов к BFF сервису в Docker
+      // Прокси API на Django backend
       "/api": {
         // Important for Windows: Node may resolve 'localhost' to IPv6 ::1,
         // while backend listens on IPv4. Use explicit IPv4 loopback.

@@ -35,26 +35,6 @@ npm run dev
 npm run build
 ```
 
-## Docker
-
-### Сборка образа
-
-```bash
-docker build -t lep-frontend .
-```
-
-### Запуск контейнера
-
-```bash
-docker run -p 8501:80 lep-frontend
-```
-
-### Через docker-compose
-
-```bash
-docker-compose up frontend-service
-```
-
 ## Переменные окружения
 
 - `VITE_BFF_SERVICE_URL` - URL BFF Service (по умолчанию: `/api`)

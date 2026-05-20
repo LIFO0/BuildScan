@@ -1,6 +1,6 @@
-## Django backend (без Docker)
+## Django backend
 
-Этот backend поднимается **без Docker** и повторяет API-контракт, который ожидает текущий фронтенд.
+API для фронтенда BuildScan: задачи анализа, файлы, история, WebSocket.
 
 ### Запуск (Windows / PowerShell)
 
