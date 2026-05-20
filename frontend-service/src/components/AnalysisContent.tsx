@@ -467,15 +467,39 @@ export default function AnalysisContent({ onViewModeChange }: AnalysisContentPro
             <div
               className={`relative border-2 border-dashed rounded-2xl text-center transition-all duration-300 flex-1 flex flex-col ${
                 loading || analysisProgress
-                  ? "border-white/20 bg-white/5 cursor-not-allowed opacity-50"
+                  ? "cursor-not-allowed opacity-50"
                   : isDragging
-                  ? "border-white bg-white/5 scale-[1.01] cursor-pointer"
-                  : "border-white/30 hover:border-white/50 hover:bg-white/5 cursor-pointer"
+                  ? "scale-[1.01] cursor-pointer"
+                  : "cursor-pointer"
               }`}
               style={{
+                borderColor:
+                  loading || analysisProgress
+                    ? "rgba(245, 158, 11, 0.15)"
+                    : isDragging
+                    ? "#F59E0B"
+                    : "rgba(245, 158, 11, 0.3)",
+                backgroundColor:
+                  loading || analysisProgress
+                    ? "rgba(245, 158, 11, 0.03)"
+                    : isDragging
+                    ? "rgba(245, 158, 11, 0.08)"
+                    : undefined,
                 padding: selectedFiles.length > 0
-                  ? '24px'  // Когда загружены документы
-                  : '134px 96px 170px 96px'  // До загрузки данных
+                  ? "24px"
+                  : "134px 96px 170px 96px",
+              }}
+              onMouseEnter={(e) => {
+                if (!loading && !analysisProgress && !isDragging) {
+                  e.currentTarget.style.backgroundColor = "rgba(245, 158, 11, 0.05)";
+                  e.currentTarget.style.borderColor = "rgba(245, 158, 11, 0.45)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!loading && !analysisProgress && !isDragging) {
+                  e.currentTarget.style.backgroundColor = "";
+                  e.currentTarget.style.borderColor = "rgba(245, 158, 11, 0.3)";
+                }
               }}
               onDragOver={(e) => {
                 if (loading || analysisProgress) return;
@@ -541,31 +565,40 @@ export default function AnalysisContent({ onViewModeChange }: AnalysisContentPro
                   <div className="flex flex-col items-center gap-[10px]">
                     {/* Заголовок */}
                     {!(loading || analysisProgress) && (
-                      <h2 className="text-3xl font-bold text-white">
+                      <h2 className="text-3xl font-bold" style={{ color: "#FFFFFF" }}>
                         Загрузите данные
                       </h2>
                     )}
 
                     {/* Описание */}
-                    <p className="text-white/70 text-base max-w-md leading-tight w-[300px]">
-                      Добавьте изображения или <br/>
-                      кадры дрона, и LineGuard AI <br />
-                      выполнит детальный анализ <br />
-                      состояния электросетей
+                    <p
+                      className="text-base max-w-md leading-relaxed text-center"
+                      style={{ color: "#FFFFFF", maxWidth: "420px" }}
+                    >
+                      Добавьте фотографии зданий или конструкций, и BuildScan выполнит
+                      детальный анализ дефектов по ГОСТ 31937-2011
                     </p>
                   </div>
 
                   {/* Кнопка загрузки */}
                   {!(loading || analysisProgress) && (
                     <Button
-                      className="text-white rounded-[8px] whitespace-nowrap flex items-center justify-center gap-[4px] border border-white/60"
-                      style={{ padding: '11px 12.5px', fontWeight: 550 }}
+                      className="rounded-[8px] whitespace-nowrap flex items-center justify-center gap-[4px] border transition-colors hover:bg-[rgba(245,158,11,0.1)]"
+                      style={{
+                        padding: "11px 12.5px",
+                        fontWeight: 550,
+                        color: "#F59E0B",
+                        borderColor: "#F59E0B",
+                        backgroundColor: "transparent",
+                      }}
                       onClick={(e) => {
                         e.stopPropagation();
                         fileInputRef.current?.click();
                       }}
                     >
-                      <img src="/images/plus.svg" alt="plus" className="mr-2" />
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="mr-2" aria-hidden>
+                        <path d="M13 7.00005L7 7.00005M7 7.00005L1 7.00005M7 7.00005L7 1M7 7.00005L7 13" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round"/>
+                      </svg>
                       <p className="text-base font-medium">
                         {selectedFiles.length > 0 ? 'Доприкрепить файлы' : 'Прикрепить файлы'}
                       </p>
@@ -619,21 +652,35 @@ export default function AnalysisContent({ onViewModeChange }: AnalysisContentPro
                       </p>
                       <div className="flex gap-4 mt-4">
                         <Button
-                          className="text-white rounded-[8px] whitespace-nowrap flex items-center justify-center gap-[4px] border border-white/60"
-                          style={{ padding: '11px 12.5px', fontWeight: 550 }}
+                          className="rounded-[8px] whitespace-nowrap flex items-center justify-center gap-[4px] border transition-colors hover:bg-[rgba(245,158,11,0.1)]"
+                          style={{
+                            padding: "11px 12.5px",
+                            fontWeight: 550,
+                            color: "#F59E0B",
+                            borderColor: "#F59E0B",
+                            backgroundColor: "transparent",
+                          }}
                           onClick={(e) => {
                             e.stopPropagation();
                             fileInputRef.current?.click();
                           }}
                         >
-                          <img src="/images/plus.svg" alt="plus" className="mr-2" />
+                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="mr-2" aria-hidden>
+                            <path d="M13 7.00005L7 7.00005M7 7.00005L1 7.00005M7 7.00005L7 1M7 7.00005L7 13" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round"/>
+                          </svg>
                           <p className="text-base font-medium">
                             Дозагрузить файлы
                           </p>
                         </Button>
                         <Button
-                          className="text-white rounded-[8px] whitespace-nowrap flex items-center justify-center gap-[4px] border border-white/60"
-                          style={{ padding: '11px 12.5px', fontWeight: 550 }}
+                          className="rounded-[8px] whitespace-nowrap flex items-center justify-center gap-[4px] border transition-colors hover:bg-[rgba(245,158,11,0.1)]"
+                          style={{
+                            padding: "11px 12.5px",
+                            fontWeight: 550,
+                            color: "#F59E0B",
+                            borderColor: "#F59E0B",
+                            backgroundColor: "transparent",
+                          }}
                           onClick={(e) => {
                             e.stopPropagation();
                             clearFiles();
@@ -647,12 +694,14 @@ export default function AnalysisContent({ onViewModeChange }: AnalysisContentPro
                       <div className="mt-4">
                         <Button
                           size="lg"
-                          className="text-white font-bold text-lg rounded-full hover:scale-105 transition-all duration-300 flex items-center justify-center border border-white/60 h-[42px]"
+                          className="font-bold text-lg rounded-full hover:scale-105 transition-all duration-300 flex items-center justify-center border h-[42px] hover:bg-[rgba(245,158,11,0.15)]"
                           radius="full"
                           style={{
-                            padding: '13px 12px',
-                            backgroundColor: 'rgba(88, 75, 255, 0.4)',
-                            fontWeight: 400
+                            padding: "13px 12px",
+                            backgroundColor: "rgba(245, 158, 11, 0.2)",
+                            borderColor: "#F59E0B",
+                            color: "#FFFFFF",
+                            fontWeight: 400,
                           }}
                           onClick={(e) => {
                             e.stopPropagation();

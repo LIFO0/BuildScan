@@ -13,7 +13,7 @@ export default function Breadcrumbs({ items }: BreadcrumbsProps) {
   return (
     <nav className="flex flex-col gap-2 relative z-10">
       {/* Название текущей страницы - сверху */}
-      <h1 className="text-white font-bold" style={{ fontSize: '40px', lineHeight: '1.2' }}>
+      <h1 className="font-bold" style={{ fontSize: '40px', lineHeight: '1.2', color: '#FFFFFF' }}>
         {items[items.length - 1].label}
       </h1>
 
@@ -24,17 +24,19 @@ export default function Breadcrumbs({ items }: BreadcrumbsProps) {
             {item.path ? (
               <Link
                 to={item.path}
-                className="text-white/60 hover:text-white transition-colors"
+                className="transition-colors hover:opacity-80"
+                style={{ color: '#6B7280' }}
               >
                 {item.label}
               </Link>
             ) : (
-              <span className="text-white">{item.label}</span>
+              <span style={{ color: '#6B7280' }}>{item.label}</span>
             )}
 
             {index < items.length - 1 && (
               <svg
-                className="w-4 h-4 text-white/40"
+                className="w-4 h-4"
+                style={{ color: '#6B7280' }}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"

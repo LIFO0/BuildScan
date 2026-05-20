@@ -106,31 +106,19 @@ export default function AnalysisPage() {
   }, [loadTaskData]);
 
   return (
-    <div className="h-screen bg-black text-white flex overflow-hidden relative">
-      {/* Декоративные световые элементы */}
-      <img
-        src="/images/light.svg"
-        alt="Light 1"
-        className="absolute top-0 left-0 pointer-events-none"
+    <div
+      className="h-screen text-white flex overflow-hidden relative"
+      style={{ backgroundColor: "#0A0A0A" }}
+    >
+      {/* Оранжевое свечение справа */}
+      <div
+        className="absolute inset-0 pointer-events-none"
         style={{
-          zIndex: 1,
+          background:
+            "radial-gradient(ellipse at right, rgba(245, 158, 11, 0.18) 0%, rgba(245, 158, 11, 0.08) 55%, transparent 70%)",
+          zIndex: 0,
         }}
-        loading="eager"
-        onError={() => {
-          console.error('Failed to load light.svg');
-        }}
-      />
-      <img
-        src="/images/light-2.svg"
-        alt="Light 2"
-        className="absolute bottom-0 right-0 pointer-events-none"
-        style={{
-          zIndex: 1,
-        }}
-        loading="eager"
-        onError={() => {
-          console.error('Failed to load light-2.svg');
-        }}
+        aria-hidden
       />
 
       {/* Левая боковая панель */}
@@ -191,21 +179,25 @@ export default function AnalysisPage() {
             to="/panel?model=analysis"
             className="flex flex-col items-center gap-2 p-3"
           >
-            <img
-              src="/images/analysis.svg"
-              alt="analysis"
+            <div
               className={`rounded-full transition-colors p-[8px] ${
-                currentModel === 'analysis'
-                  ? 'bg-white/10 hover:bg-white/20'
-                  : 'hover:bg-white/10'
+                currentModel === "analysis"
+                  ? "bg-[rgba(245,158,11,0.15)]"
+                  : "hover:bg-[rgba(245,158,11,0.1)]"
               }`}
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
+            >
+              <img
+                src="/images/magnifier_logo.png"
+                alt="analysis"
+                className="h-6 w-6 object-contain"
+              />
+            </div>
+            <span
+              className="text-xs font-medium"
+              style={{
+                color: currentModel === "analysis" ? "#F59E0B" : "rgba(255,255,255,0.6)",
               }}
-            />
-            <span className={`text-xs font-medium ${
-              currentModel === 'analysis' ? 'text-white' : 'text-white/60'
-            }`}>
+            >
               АНАЛИЗ
             </span>
           </Link>
@@ -213,23 +205,42 @@ export default function AnalysisPage() {
           {/* История */}
           <Link
             to="/panel?model=history"
-            className="flex flex-col items-center gap-2 p-3"
+            className="group flex flex-col items-center gap-2 p-3"
           >
-            <img
-              src="/images/history.svg"
-              alt="history"
+            <div
               className={`rounded-full transition-colors p-[8px] ${
-                currentModel === 'history'
-                  ? 'bg-white/10 hover:bg-white/20'
-                  : 'hover:bg-white/10'
+                currentModel === "history"
+                  ? "bg-[rgba(245,158,11,0.15)]"
+                  : "group-hover:bg-[rgba(245,158,11,0.1)]"
               }`}
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-              }}
-            />
-            <span className={`text-xs font-medium ${
-              currentModel === 'history' ? 'text-white' : 'text-white/60'
-            }`}>
+            >
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className="transition-colors"
+              >
+                <path
+                  fillRule="evenodd"
+                  clipRule="evenodd"
+                  d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22ZM16 13C16.5523 13 17 12.5523 17 12C17 11.4477 16.5523 11 16 11H13V7C13 6.44772 12.5523 6 12 6C11.4477 6 11 6.44771 11 7V12C11 12.5523 11.4477 13 12 13H16Z"
+                  className={
+                    currentModel === "history"
+                      ? "fill-[#F59E0B]"
+                      : "fill-white group-hover:fill-[#F59E0B]"
+                  }
+                />
+              </svg>
+            </div>
+            <span
+              className={`text-xs font-medium transition-colors ${
+                currentModel === "history"
+                  ? "text-[#F59E0B]"
+                  : "text-white/60 group-hover:text-[#F59E0B]"
+              }`}
+            >
               ИСТОРИЯ
             </span>
           </Link>
@@ -241,16 +252,19 @@ export default function AnalysisPage() {
         {/* Нижние элементы */}
         <div className="flex flex-col items-center gap-6">
           {/* Помощь */}
-          <button className="p-3 rounded-lg hover:bg-white/10 transition-colors">
+          <button className="group p-3 rounded-lg hover:bg-[rgba(245,158,11,0.1)] transition-colors">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="12" cy="12" r="10" stroke="white" strokeWidth="2"/>
-              <path d="M9.09 9C9.3251 8.33167 9.78915 7.76811 10.4 7.40913C11.0108 7.05016 11.7289 6.91894 12.4272 7.03871C13.1255 7.15849 13.7588 7.52152 14.2151 8.06353C14.6713 8.60553 14.9211 9.29152 14.92 10C14.92 12 11.92 13 11.92 13M12 17H12.01" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <circle cx="12" cy="12" r="10" className="stroke-white group-hover:stroke-[#F59E0B] transition-colors" strokeWidth="2"/>
+              <path d="M9.09 9C9.3251 8.33167 9.78915 7.76811 10.4 7.40913C11.0108 7.05016 11.7289 6.91894 12.4272 7.03871C13.1255 7.15849 13.7588 7.52152 14.2151 8.06353C14.6713 8.60553 14.9211 9.29152 14.92 10C14.92 12 11.92 13 11.92 13M12 17H12.01" className="stroke-white group-hover:stroke-[#F59E0B] transition-colors" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
 
           {/* Аватар */}
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
-            <span className="text-white text-sm font-medium">U</span>
+          <div
+            className="w-10 h-10 rounded-full flex items-center justify-center"
+            style={{ backgroundColor: "#F59E0B" }}
+          >
+            <span className="text-sm font-medium" style={{ color: "#0A0A0A" }}>U</span>
           </div>
         </div>
       </div>
