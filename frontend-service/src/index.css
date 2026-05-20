@@ -21,6 +21,12 @@
   font-style: normal;
 }
 
+html,
+body,
+#root {
+  background-color: #0a0a0a;
+}
+
 body {
   margin: 0;
   font-family: "Inter Tight", sans-serif;

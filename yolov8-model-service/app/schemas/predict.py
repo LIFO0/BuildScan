@@ -38,6 +38,8 @@ class PredictResponse(BaseModel):
     defects_count: int
     has_defects: bool
     report: Optional[Dict[str, Any]] = None
+    # Проверка сцены: фасад здания vs «не здание» (CLIP zero-shot, если доступен)
+    scene: Optional[Dict[str, Any]] = None
 
 class ModelInfoResponse(BaseModel):
     model_path: str
