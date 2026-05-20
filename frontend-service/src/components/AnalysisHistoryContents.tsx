@@ -5,6 +5,7 @@ import Breadcrumbs from "./Breadcrumbs";
 import PhotoThumbnails from "./PhotoThumbnails";
 import ImageAnnotationTool from "./ImageAnnotationTool";
 import MetricsCard from "./MetricsCard";
+import { getNotBuildingMessage, getNotBuildingBannerTitle, isNotBuildingPhoto } from "@/shared/analysisScene";
 
 interface DefectSummary {
   type: string;
@@ -35,6 +36,12 @@ interface ImageSummary {
   total_objects?: number;
   defects_count?: number;
   has_defects?: boolean;
+  scene?: {
+    skipped?: boolean;
+    is_building_facade?: boolean | null;
+    message_ru?: string;
+    method?: string;
+  };
   report?: any;
   manual_annotations?: Array<{
     x: number;
@@ -84,16 +91,18 @@ interface AnalysisHistoryContentsProps {
   onImageUpdated?: () => void;
 }
 
+type FileListStatus = "defects" | "clean" | "not_building" | "failed";
+
 interface FileItemProps {
   image: TaskImage;
   previewUrl: string | null;
-  hasDefects: boolean;
+  fileListStatus: FileListStatus;
   formatFileSize: (bytes: number) => string;
   onOpenImage: (image: TaskImage, viewMode: 'original' | 'result') => void;
   onDeleteImage: (imageId: string) => void;
 }
 
-const FileItem = memo(({ image, previewUrl, hasDefects, formatFileSize, onOpenImage, onDeleteImage }: FileItemProps) => {
+const FileItem = memo(({ image, previewUrl, fileListStatus, formatFileSize, onOpenImage, onDeleteImage }: FileItemProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
@@ -264,13 +273,41 @@ const FileItem = memo(({ image, previewUrl, hasDefects, formatFileSize, onOpenIm
 
       {/* Статус - по центру */}
       <div className="flex-shrink-0 justify-self-center">
+        {(() => {
+          const notBuildingHint =
+            fileListStatus === "not_building"
+              ? getNotBuildingMessage(image.summary)
+              : null;
+          const notBuildingLabel =
+            notBuildingHint &&
+            (notBuildingHint.includes("На фотографии не здание") ||
+              notBuildingHint.includes("нет фасада здания"))
+              ? "Не здание"
+              : fileListStatus === "not_building"
+                ? "Не фасад"
+                : null;
+          return (
         <span
           className={`px-3 py-1 text-xs font-semibold rounded-full ${
-            hasDefects ? "bg-red-500/30 text-red-200" : "bg-emerald-500/30 text-emerald-100"
+            fileListStatus === "defects"
+              ? "bg-red-500/30 text-red-200"
+              : fileListStatus === "not_building"
+                ? "bg-amber-500/25 text-amber-100 border border-amber-400/40"
+                : fileListStatus === "failed"
+                  ? "bg-orange-600/30 text-orange-100"
+                  : "bg-emerald-500/30 text-emerald-100"
           }`}
         >
-          {hasDefects ? "Поврежден" : "Без дефектов"}
+          {fileListStatus === "defects"
+            ? "Поврежден"
+            : fileListStatus === "not_building"
+              ? notBuildingLabel
+              : fileListStatus === "failed"
+                ? "Ошибка"
+                : "Без дефектов"}
         </span>
+          );
+        })()}
       </div>
 
       {/* Размер */}
@@ -550,16 +587,16 @@ export default function AnalysisHistoryContents({
     return path;
   }, [BFF_SERVICE_URL]);
 
-  const getImageStatus = useCallback((image: TaskImage) => {
-    if (typeof image.summary?.has_defects === "boolean") {
-      return image.summary.has_defects;
+  const getFileListStatus = useCallback((image: TaskImage): FileListStatus => {
+    if (image.status?.toLowerCase() === "failed") return "failed";
+    if (isNotBuildingPhoto(image.summary)) return "not_building";
+    if (typeof image.summary?.has_defects === "boolean" && image.summary.has_defects) {
+      return "defects";
     }
-
-    if (typeof image.summary?.defects_count === "number") {
-      return (image.summary.defects_count || 0) > 0;
+    if (typeof image.summary?.defects_count === "number" && (image.summary.defects_count || 0) > 0) {
+      return "defects";
     }
-
-    return image.status?.toLowerCase() === "failed";
+    return "clean";
   }, []);
 
   // Обработка клика вне меню фильтрации
@@ -636,11 +673,17 @@ export default function AnalysisHistoryContents({
         case "file_name":
           comparison = a.file_name.localeCompare(b.file_name, "ru");
           break;
-        case "status":
-          const statusA = getImageStatus(a) ? 1 : 0;
-          const statusB = getImageStatus(b) ? 1 : 0;
-          comparison = statusA - statusB;
+        case "status": {
+          const rank = (img: TaskImage) => {
+            const st = getFileListStatus(img);
+            if (st === "failed") return 4;
+            if (st === "defects") return 3;
+            if (st === "not_building") return 2;
+            return 1;
+          };
+          comparison = rank(a) - rank(b);
           break;
+        }
       }
 
       return sortDirection === "asc" ? comparison : -comparison;
@@ -815,6 +858,8 @@ export default function AnalysisHistoryContents({
       ? resolveImageUrl(selectedImageForView.original_url)
       : resolveImageUrl(selectedImageForView.result_url);
 
+    const notBuildingMsg = getNotBuildingMessage(selectedImageForView.summary);
+
     // Преобразуем изображения в формат для PhotoThumbnails
     const filesForThumbnails = sortedImages.map((img) => ({
       file: new File([], img.file_name),
@@ -834,6 +879,17 @@ export default function AnalysisHistoryContents({
       >
         {/* Просмотр изображения и метрики */}
         <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+          {notBuildingMsg ? (
+            <div
+              className="shrink-0 w-full rounded-xl border border-amber-400/45 bg-amber-950/50 px-4 py-3 text-amber-50"
+              role="status"
+            >
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-200/95 mb-1.5">
+                {getNotBuildingBannerTitle(notBuildingMsg)}
+              </p>
+              <p className="text-sm leading-relaxed text-amber-50/95">{notBuildingMsg}</p>
+            </div>
+          ) : null}
           {/* Контейнер изображения */}
           <div className="flex-1 flex items-center justify-center overflow-hidden relative">
             {currentImageUrl ? (
@@ -1061,6 +1117,10 @@ export default function AnalysisHistoryContents({
                             </div>
                           ))}
                         </div>
+                      ) : notBuildingMsg ? (
+                        <p className="mt-1 text-amber-100/85">
+                          Поиск дефектов не выполнялся — изображение не относится к фасаду здания для данного анализа.
+                        </p>
                       ) : (
                         <p className="mt-1 text-white/70">Дефекты не обнаружены.</p>
                       )}
@@ -1356,14 +1416,14 @@ export default function AnalysisHistoryContents({
                     itemContent={(_index, image) => {
                       // Используем thumbnail если есть, иначе fallback на URL
                       const previewUrl = image.thumbnail || resolveImageUrl(image.result_url || image.original_url);
-                      const hasDefects = getImageStatus(image);
+                      const fileListStatus = getFileListStatus(image);
 
                       return (
                         <div style={{ marginBottom: '12px', paddingLeft: '16px', paddingRight: '16px' }}>
                           <FileItem
                             image={image}
                             previewUrl={previewUrl}
-                            hasDefects={hasDefects}
+                            fileListStatus={fileListStatus}
                             formatFileSize={formatFileSize}
                             onOpenImage={handleOpenImage}
                             onDeleteImage={handleDeleteImage}

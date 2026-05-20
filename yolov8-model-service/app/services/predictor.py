@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 # Fallback identification when model doesn't output element/material/age classes
 from app.services.building_identification import infer_identification_from_defects
+from app.services.vlm_damage_assessor import assess_building_scene, _MSG_NOT_BUILDING_FALLBACK
 
 # Маппинг классов (домен: дефекты зданий)
 # ВАЖНО: если ваша YOLO-модель имеет другие id/названия, достаточно поменять этот маппинг.
@@ -166,14 +167,28 @@ def _build_report(detections: List[dict]) -> Dict[str, Any]:
         "age_period": age or "не определено (нужна модель/классы для периода постройки)",
     }
 
-    # If model didn't provide identification, try heuristic fallback so UI always shows something useful
+    # Эвристика infer_identification_from_defects задаёт «фасад» даже при пустых / нерелевантных
+    # детекциях — это вводит в заблуждение на фото «не здание». Используем её только если
+    # модель реально что-то нашла из классов дефектов.
+    defect_for_id = [d for d in detections if d.get("class") in DEFECT_CLASSES]
     if (element is None) and (material is None) and (age is None):
-        inferred = infer_identification_from_defects(detections)
-        identification = {
-            "object": inferred.object,
-            "material": inferred.material,
-            "age_period": inferred.age_period,
-        }
+        if defect_for_id:
+            inferred = infer_identification_from_defects(detections)
+            identification = {
+                "object": inferred.object,
+                "material": inferred.material,
+                "age_period": inferred.age_period,
+            }
+        else:
+            identification = {
+                "object": (
+                    "На фотографии не распознан фрагмент наружного фасада или несущей стены здания "
+                    "(не найдено детекций по целевым классам дефектов). Если на снимке нет здания, "
+                    "загрузите крупный план стены; если это фасад — попробуйте другой ракурс или освещение."
+                ),
+                "material": "не определено (нет признаков дефектов по целевым классам)",
+                "age_period": "не определено",
+            }
 
     # --- Block 2: Defects list ---
     defect_detections = [d for d in detections if d.get("class") in DEFECT_CLASSES]
@@ -303,6 +318,44 @@ def _build_report(detections: List[dict]) -> Dict[str, Any]:
         "block6_final_card_text": "\n".join(final_lines),
     }
 
+
+def _build_report_scene_rejected(message_ru: str) -> Dict[str, Any]:
+    """Карточка, когда снимок не относится к фасаду здания (CLIP или fallback по пустым детекциям)."""
+    identification = {
+        "object": message_ru,
+        "material": "—",
+        "age_period": "—",
+    }
+    gost = {
+        "category": 1,
+        "status": "АНАЛИЗ НЕ ПРИМЕНИМ",
+        "basis": ["Снимок не относится к целевому типу для поиска дефектов фасада."],
+        "normative": "—",
+    }
+    urgency = {"level": 1, "label": "НИЗКАЯ", "indicator": "🟢"}
+    recommendations = [
+        "Сделайте фото крупным планом наружного фасада или несущей стены здания.",
+        "Избегайте сильной засветки и сильного наклона; фрагмент стены должен занимать большую часть кадра.",
+    ]
+    final_lines = [
+        "АКТ ТЕХНИЧЕСКОГО ОСМОТРА (черновик ИИ)",
+        message_ru,
+        "",
+        "Анализ дефектов не выполнялся: изображение не классифицировано как фасад здания.",
+        "",
+        "ВАЖНО: результат не заменяет заключение эксперта.",
+    ]
+    return {
+        "block1_identification": identification,
+        "block2_defects": [],
+        "block3_gost_31937_2011": gost,
+        "block4_causes": ["Неприменимость связана с типом сцены на фотографии, а не с состоянием конструкции."],
+        "block5_urgency": urgency,
+        "block5_recommendations": recommendations,
+        "block6_final_card_text": "\n".join(final_lines),
+    }
+
+
 class YOLOPredictor:
     """Класс для предсказаний YOLOv8 модели"""
 
@@ -329,7 +382,22 @@ class YOLOPredictor:
         Returns:
             Словарь с результатами детекции
         """
-        # Предсказание
+        scene = assess_building_scene(image)
+        empty_stats = {name: 0 for name in CLASS_NAMES.values()}
+
+        if (not scene.get("skipped")) and scene.get("is_building_facade") is False:
+            report = _build_report_scene_rejected(scene["message_ru"])
+            return {
+                "detections": [],
+                "statistics": empty_stats,
+                "total_objects": 0,
+                "defects_count": 0,
+                "has_defects": False,
+                "report": report,
+                "scene": scene,
+            }
+
+        # Предсказание YOLO (сцена допустима или CLIP недоступен)
         results = self.model(image, conf=self.conf_threshold)
 
         # Парсинг результатов
@@ -406,15 +474,39 @@ class YOLOPredictor:
                 if class_name in DEFECT_CLASSES:
                     defects_count += 1
 
-        report = _build_report(detections)
+        # Шумовые боксы (не дефекты и низкая уверенность) не должны блокировать ветку «нет фасада»
+        if defects_count == 0 and detections:
+            max_conf = max(float(d.get("confidence") or 0) for d in detections)
+            try:
+                noise_max = float(os.getenv("YOLO_NOISE_MAX_CONF", "0.45"))
+            except ValueError:
+                noise_max = 0.45
+            if max_conf < noise_max:
+                detections = []
+                statistics = {name: 0 for name in CLASS_NAMES.values()}
 
-        result_dict = {
+        report = _build_report(detections)
+        scene_out: Dict[str, Any] = dict(scene)
+
+        # CLIP недоступен и YOLO пустой: не подменяем «фасад», но и не утверждаем «не здание»
+        # (на ровном фасаде модель тоже может ничего не найти).
+        if scene.get("skipped") and len(detections) == 0:
+            scene_out["is_building_facade"] = None
+            scene_out["message_ru"] = ""
+            scene_out["method"] = "yolo_empty_no_clip"
+        elif scene.get("skipped") and len(detections) > 0:
+            # Есть только нерелевантные/не-дефектные срабатывания — не помечаем как «точно здание»
+            scene_out["is_building_facade"] = None
+            scene_out.setdefault("message_ru", "")
+
+        result_dict: Dict[str, Any] = {
             "detections": detections,
             "statistics": statistics,
             "total_objects": len(detections),
             "defects_count": defects_count,
             "has_defects": defects_count > 0,
-            "report": report
+            "report": report,
+            "scene": scene_out,
         }
 
         if return_visualization and annotated_image:

@@ -175,11 +175,9 @@ export default function AnalysisPage() {
           </button>
         ) : (
           <img
-            src="/images/logo-small.svg"
-            alt="LineGuard AI"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none';
-            }}
+            src="/images/magnifier_logo.png"
+            alt="BuildScan"
+            className="h-8 w-8 object-contain"
           />
         )}
 

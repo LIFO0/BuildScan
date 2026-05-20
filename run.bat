@@ -41,18 +41,18 @@ if errorlevel 1 goto :fatal
 
 if /i "%CMD%"=="frontend" (
   set "FE=%ROOT%frontend-service"
-  start "BuildScan Frontend" /D "%FE%" cmd /k npm run dev -- --host 127.0.0.1 --port 5173
+  start "LineGuard Frontend" /D "%FE%" cmd /k npm run dev -- --host 127.0.0.1 --port 5173
   exit /b 0
 )
 if /i "%CMD%"=="django" (
   set "BE=%ROOT%backend-django"
-  start "BuildScan Django API" /D "%BE%" cmd /k .venv\Scripts\uvicorn.exe lineguard.asgi:application --host 127.0.0.1 --port 8000
+  start "LineGuard Django API" /D "%BE%" cmd /k .venv\Scripts\uvicorn.exe lineguard.asgi:application --host 127.0.0.1 --port 8000
   exit /b 0
 )
 if /i "%CMD%"=="yolo" (
   set "YO=%ROOT%yolov8-model-service"
   set "MODEL=%ROOT%models\best.pt"
-  start "BuildScan YOLOv8 Service" /D "%YO%" cmd /k set "MODEL_PATH=%MODEL%" ^& set "PORT=8001" ^& .venv\Scripts\python.exe -m app.main
+  start "LineGuard YOLOv8 Service" /D "%YO%" cmd /k set "MODEL_PATH=%MODEL%" ^& set "PORT=8001" ^& .venv\Scripts\python.exe -m app.main
   exit /b 0
 )
 
@@ -62,9 +62,9 @@ set "BE=%ROOT%backend-django"
 set "YO=%ROOT%yolov8-model-service"
 set "MODEL=%ROOT%models\best.pt"
 
-start "BuildScan Frontend" /D "%FE%" cmd /k npm run dev -- --host 127.0.0.1 --port 5173
-start "BuildScan Django API" /D "%BE%" cmd /k .venv\Scripts\uvicorn.exe lineguard.asgi:application --host 127.0.0.1 --port 8000
-start "BuildScan YOLOv8 Service" /D "%YO%" cmd /k set "MODEL_PATH=%MODEL%" ^& set "PORT=8001" ^& .venv\Scripts\python.exe -m app.main
+start "LineGuard Frontend" /D "%FE%" cmd /k npm run dev -- --host 127.0.0.1 --port 5173
+start "LineGuard Django API" /D "%BE%" cmd /k .venv\Scripts\uvicorn.exe lineguard.asgi:application --host 127.0.0.1 --port 8000
+start "LineGuard YOLOv8 Service" /D "%YO%" cmd /k set "MODEL_PATH=%MODEL%" ^& set "PORT=8001" ^& .venv\Scripts\python.exe -m app.main
 
 echo.
 call :ok   "Started."
@@ -182,18 +182,18 @@ exit /b %rc%
 
 :start_frontend
 set "FE=%ROOT%frontend-service"
-start "BuildScan Frontend" /D "%FE%" cmd /k npm run dev -- --host 127.0.0.1 --port 5173
+start "LineGuard Frontend" /D "%FE%" cmd /k npm run dev -- --host 127.0.0.1 --port 5173
 exit /b 0
 
 :start_django
 set "BE=%ROOT%backend-django"
-start "BuildScan Django API" /D "%BE%" cmd /k .venv\Scripts\uvicorn.exe lineguard.asgi:application --host 127.0.0.1 --port 8000
+start "LineGuard Django API" /D "%BE%" cmd /k .venv\Scripts\uvicorn.exe lineguard.asgi:application --host 127.0.0.1 --port 8000
 exit /b 0
 
 :start_yolo
 set "YO=%ROOT%yolov8-model-service"
 set "MODEL=%ROOT%models\best.pt"
-start "BuildScan YOLOv8 Service" /D "%YO%" cmd /k set "MODEL_PATH=%MODEL%" ^& set "PORT=8001" ^& .venv\Scripts\python.exe -m app.main
+start "LineGuard YOLOv8 Service" /D "%YO%" cmd /k set "MODEL_PATH=%MODEL%" ^& set "PORT=8001" ^& .venv\Scripts\python.exe -m app.main
 exit /b 0
 
 :stop_ports
