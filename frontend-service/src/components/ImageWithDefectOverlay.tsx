@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect, useCallback, memo } from "react";
+import { useMemo, memo } from "react";
 import { getDefectMetadata } from "@/types/metrics";
+import { useContainedImageLayout } from "@/shared/useContainedImageLayout";
 
 export interface OverlayDetection {
   bbox: number[];
@@ -9,7 +10,6 @@ export interface OverlayDetection {
     type?: string;
     severity?: string;
   };
-  is_manual?: boolean;
 }
 
 interface ImageWithDefectOverlayProps {
@@ -76,97 +76,69 @@ function ImageWithDefectOverlay({
   highlightedIndex = null,
   imageStyle,
 }: ImageWithDefectOverlayProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const imageRef = useRef<HTMLImageElement>(null);
-  const [layout, setLayout] = useState({ width: 0, height: 0, offsetX: 0, offsetY: 0 });
-  const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
+  const { containerRef, layout, naturalSize } = useContainedImageLayout(src);
 
-  const updateLayout = useCallback(() => {
-    const container = containerRef.current;
-    const image = imageRef.current;
-    if (!container || !image || !image.complete || image.naturalWidth === 0) {
-      return;
-    }
+  const overlayRects = useMemo(() => {
+    if (!showOverlay || layout.width <= 0) return [];
 
-    const containerRect = container.getBoundingClientRect();
-    const imageRect = image.getBoundingClientRect();
+    return detections
+      .map((detection, index) => {
+        const rect = bboxToDisplayRect(
+          detection.bbox,
+          naturalSize.width,
+          naturalSize.height,
+          layout.width,
+          layout.height
+        );
+        if (!rect || rect.width < 2 || rect.height < 2) {
+          return null;
+        }
 
-    setLayout({
-      width: imageRect.width,
-      height: imageRect.height,
-      offsetX: imageRect.left - containerRect.left,
-      offsetY: imageRect.top - containerRect.top,
-    });
-    setNaturalSize({
-      width: image.naturalWidth,
-      height: image.naturalHeight,
-    });
-  }, []);
+        const isDefect = isDefectDetection(detection);
+        const severity = detection.defect_summary?.severity;
+        const stroke = getStrokeColor(severity, isDefect);
+        const isHighlighted = highlightedIndex === index;
 
-  useEffect(() => {
-    updateLayout();
-    const container = containerRef.current;
-    if (!container) return;
-
-    const observer = new ResizeObserver(updateLayout);
-    observer.observe(container);
-    window.addEventListener("resize", updateLayout);
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", updateLayout);
-    };
-  }, [updateLayout, src, showOverlay]);
-
-  const overlayRects = showOverlay
-    ? detections
-        .map((detection, index) => {
-          const rect = bboxToDisplayRect(
-            detection.bbox,
-            naturalSize.width,
-            naturalSize.height,
-            layout.width,
-            layout.height
-          );
-          if (!rect || rect.width < 2 || rect.height < 2) {
-            return null;
-          }
-
-          const isDefect = isDefectDetection(detection);
-          const severity = detection.defect_summary?.severity;
-          const stroke = getStrokeColor(severity, isDefect);
-          const isHighlighted = highlightedIndex === index;
-
-          return {
-            index,
-            rect,
-            stroke,
-            isDefect,
-            label: detection.class_ru || detection.class || "",
-            isHighlighted,
-            isManual: detection.is_manual,
-          };
-        })
-        .filter((item): item is NonNullable<typeof item> => item !== null)
-    : [];
+        return {
+          index,
+          rect,
+          stroke,
+          isDefect,
+          label: detection.class_ru || detection.class || "",
+          isHighlighted,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+  }, [
+    showOverlay,
+    detections,
+    naturalSize.width,
+    naturalSize.height,
+    layout.width,
+    layout.height,
+    highlightedIndex,
+  ]);
 
   return (
     <div
       ref={containerRef}
       className="relative flex h-full w-full max-h-full max-w-full items-center justify-center"
     >
-      <img
-        ref={imageRef}
-        src={src}
-        alt={alt}
-        className="block max-h-full max-w-full object-contain"
-        style={{
-          width: "auto",
-          height: "auto",
-          ...imageStyle,
-        }}
-        onLoad={updateLayout}
-      />
+      {layout.width > 0 && (
+        <div
+          role="img"
+          aria-label={alt}
+          className="absolute shrink-0 bg-contain bg-center bg-no-repeat"
+          style={{
+            left: layout.offsetX,
+            top: layout.offsetY,
+            width: layout.width,
+            height: layout.height,
+            backgroundImage: `url("${src}")`,
+            ...imageStyle,
+          }}
+        />
+      )}
 
       {showOverlay && layout.width > 0 && overlayRects.length > 0 && (
         <svg
@@ -217,16 +189,6 @@ function ImageWithDefectOverlay({
                     {item.label.length > 28 ? `${item.label.slice(0, 28)}…` : item.label}
                   </text>
                 </>
-              )}
-              {item.isManual && (
-                <circle
-                  cx={item.rect.x + item.rect.width - 6}
-                  cy={item.rect.y + 6}
-                  r={5}
-                  fill="#F59E0B"
-                  stroke="#0A0A0A"
-                  strokeWidth={1}
-                />
               )}
             </g>
           ))}

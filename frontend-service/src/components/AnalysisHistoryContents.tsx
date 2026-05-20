@@ -3,9 +3,9 @@ import { motion } from "framer-motion";
 import { Virtuoso } from "react-virtuoso";
 import Breadcrumbs from "./Breadcrumbs";
 import PhotoThumbnails from "./PhotoThumbnails";
-import ImageAnnotationTool from "./ImageAnnotationTool";
+import DefectResultModal from "./DefectResultModal";
 import ImageWithDefectOverlay from "./ImageWithDefectOverlay";
-import MetricsCard from "./MetricsCard";
+import SafeImage from "./SafeImage";
 import { getNotBuildingMessage, getNotBuildingBannerTitle, isNotBuildingPhoto } from "@/shared/analysisScene";
 
 interface DefectSummary {
@@ -28,7 +28,6 @@ interface Detection {
   bbox: number[];
   bbox_size: BboxSize;
   defect_summary: DefectSummary;
-  is_manual?: boolean;  // Метка что это ручная аннотация
 }
 
 interface ImageSummary {
@@ -44,15 +43,6 @@ interface ImageSummary {
     method?: string;
   };
   report?: any;
-  manual_annotations?: Array<{
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    name?: string;
-    is_defect?: boolean;
-  }>;
-  has_manual_annotations?: boolean;
 }
 
 interface TaskImage {
@@ -89,7 +79,6 @@ interface AnalysisHistoryContentsProps {
   taskId?: string | null;
   onImageDeleted?: (imageId: string) => void;
   onViewModeChange?: (isViewing: boolean) => void;
-  onImageUpdated?: () => void;
 }
 
 type FileListStatus = "defects" | "clean" | "not_building" | "failed";
@@ -99,7 +88,7 @@ interface FileItemProps {
   previewUrl: string | null;
   fileListStatus: FileListStatus;
   formatFileSize: (bytes: number) => string;
-  onOpenImage: (image: TaskImage, viewMode: 'original' | 'result') => void;
+  onOpenImage: (image: TaskImage, viewMode?: 'original' | 'result') => void;
   onDeleteImage: (imageId: string) => void;
 }
 
@@ -358,9 +347,9 @@ const FileItem = memo(({ image, previewUrl, fileListStatus, formatFileSize, onOp
                 e.stopPropagation();
                 handleOpenResult();
               }}
-              disabled={!image.result_url}
+              disabled={!(image.summary?.detections?.length)}
               className={`w-full text-left px-4 py-2 text-sm transition-colors ${
-                image.result_url
+                image.summary?.detections?.length
                   ? "text-white hover:bg-white/10"
                   : "text-white/40 cursor-not-allowed"
               }`}
@@ -454,7 +443,6 @@ export default function AnalysisHistoryContents({
   taskId,
   onImageDeleted,
   onViewModeChange,
-  onImageUpdated,
 }: AnalysisHistoryContentsProps) {
   const [sortType, setSortType] = useState<SortType>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
@@ -468,8 +456,7 @@ export default function AnalysisHistoryContents({
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<'original' | 'result'>('original');
   const [, setShowMetricsPanel] = useState<boolean>(false);
-  const [isAnnotationMode, setIsAnnotationMode] = useState<boolean>(false);
-  const [highlightedMetricIndex, setHighlightedMetricIndex] = useState<number | null>(null);
+  const [isResultModalOpen, setIsResultModalOpen] = useState<boolean>(false);
 
   const BFF_SERVICE_URL = (import.meta as any).env?.VITE_BFF_SERVICE_URL;
 
@@ -495,8 +482,9 @@ export default function AnalysisHistoryContents({
   const closeView = useCallback(() => {
     setSelectedImageForView(null);
     setSelectedImageIndex(null);
+    setViewMode('original');
     setShowMetricsPanel(false);
-    setHighlightedMetricIndex(null);
+    setIsResultModalOpen(false);
   }, []);
 
   // Сохраняем функцию закрытия для использования извне
@@ -708,13 +696,13 @@ export default function AnalysisHistoryContents({
   }, [sortType, sortDirection]);
 
   // Открытие изображения для просмотра
-  const handleOpenImage = useCallback((image: TaskImage, mode: 'original' | 'result') => {
+  const handleOpenImage = useCallback((image: TaskImage, mode: 'original' | 'result' = 'original') => {
     const index = sortedImages.findIndex(img => img.id === image.id);
     setSelectedImageForView(image);
     setSelectedImageIndex(index);
     setViewMode(mode);
-    // Автоматически открываем панель метрик для режима результата
     setShowMetricsPanel(mode === 'result');
+    setIsResultModalOpen(false);
   }, [sortedImages]);
 
   // Удаление изображения
@@ -871,10 +859,6 @@ export default function AnalysisHistoryContents({
       id: img.id,
     }));
 
-    const annotationImageUrl = viewMode === 'original'
-      ? resolveImageUrl(selectedImageForView.original_url)
-      : resolveImageUrl(selectedImageForView.result_url);
-
     return (
       <>
       <div
@@ -894,17 +878,56 @@ export default function AnalysisHistoryContents({
               <p className="text-sm leading-relaxed text-amber-50/95">{notBuildingMsg}</p>
             </div>
           ) : null}
-          {/* Контейнер изображения — сохраняет высоту при появлении панели результатов */}
-          <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden relative w-full">
+          {/* Компактное превью фото */}
+          <div className="relative shrink-0 w-full h-[min(40vh,380px)] flex items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-black/30">
             {currentImageUrl ? (
-              <div className="relative h-full w-full max-h-full max-w-full flex items-center justify-center">
-                <ImageWithDefectOverlay
-                  src={currentImageUrl}
-                  alt={selectedImageForView.file_name}
-                  detections={detectionsForOverlay}
-                  showOverlay={showDefectOverlay}
-                  highlightedIndex={highlightedMetricIndex}
-                />
+              <div className="relative h-full w-full flex items-center justify-center px-4 pb-12">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (hasDetections) setIsResultModalOpen(true);
+                  }}
+                  disabled={!hasDetections}
+                  className={`group relative flex h-full w-full max-h-full max-w-full items-center justify-center rounded-lg border-0 bg-transparent p-0 transition-opacity ${
+                    hasDetections
+                      ? "cursor-zoom-in hover:opacity-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#F59E0B] focus-visible:outline-offset-4"
+                      : "cursor-default"
+                  }`}
+                  title={
+                    hasDetections
+                      ? "Нажмите, чтобы рассмотреть дефекты крупным планом"
+                      : undefined
+                  }
+                  aria-label={
+                    hasDetections
+                      ? "Открыть фото с выделенными дефектами"
+                      : selectedImageForView.file_name
+                  }
+                >
+                  {showDefectOverlay ? (
+                    <ImageWithDefectOverlay
+                      src={currentImageUrl}
+                      alt={selectedImageForView.file_name}
+                      detections={detectionsForOverlay}
+                      showOverlay
+                    />
+                  ) : (
+                    <>
+                      <SafeImage
+                        src={currentImageUrl}
+                        alt={selectedImageForView.file_name}
+                        containerClassName="relative h-full w-full"
+                      />
+                      {hasDetections && (
+                        <span className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-black/0 opacity-0 transition-all group-hover:bg-black/30 group-hover:opacity-100">
+                          <span className="rounded-lg bg-black/70 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm">
+                            Рассмотреть дефекты
+                          </span>
+                        </span>
+                      )}
+                    </>
+                  )}
+                </button>
 
                 {/* PhotoThumbnails компонент - по центру сверху на фотографии */}
             <motion.div
@@ -918,7 +941,6 @@ export default function AnalysisHistoryContents({
                     onSelectImage={(_file, index) => {
                       setSelectedImageIndex(index);
                       setSelectedImageForView(sortedImages[index]);
-                      setHighlightedMetricIndex(null);
                     }}
                     onRemoveImage={handleRemoveImageFromView}
                     onLoadPreview={() => {}} // Превью уже загружены
@@ -926,20 +948,20 @@ export default function AnalysisHistoryContents({
                     onSelect={(index) => {
                       setSelectedImageIndex(index);
                       setSelectedImageForView(sortedImages[index]);
-                      setHighlightedMetricIndex(null);
                     }}
                   />
                 </motion.div>
 
-                {/* Кнопки переключения режима просмотра - по центру внизу на фотографии */}
-                <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center gap-1.5 z-10">
-                  {/* Кнопки Оригинал и Результат */}
+                {/* Оригинал / Результат */}
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-10">
                   <div className="flex gap-2 bg-black/60 backdrop-blur-sm rounded-lg p-1">
                     <button
-                      onClick={() => {
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setViewMode('original');
+                        setIsResultModalOpen(false);
                         setShowMetricsPanel(false);
-                        setHighlightedMetricIndex(null);
                       }}
                       className={`px-3 py-1.5 rounded-md transition-colors text-sm ${
                         viewMode === 'original'
@@ -950,9 +972,13 @@ export default function AnalysisHistoryContents({
                       Оригинал
                     </button>
                     <button
-                      onClick={() => {
-                        setViewMode('result');
-                        setShowMetricsPanel(true);
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (hasDetections) {
+                          setViewMode('result');
+                          setShowMetricsPanel(true);
+                        }
                       }}
                       disabled={!hasDetections}
                       className={`px-3 py-1.5 rounded-md transition-colors text-sm ${
@@ -966,34 +992,6 @@ export default function AnalysisHistoryContents({
                       Результат
                     </button>
                   </div>
-
-                  {/* Отдельная кнопка Выделить с отступом 6px */}
-                  <button
-                    onClick={() => setIsAnnotationMode(true)}
-                    disabled={!selectedImageForView.result_url}
-                    className={`px-3 py-1.5 rounded-md transition-colors text-sm flex items-center gap-1.5 bg-black/60 backdrop-blur-sm ${
-                      selectedImageForView.result_url
-                        ? 'text-white/60 hover:bg-white/10'
-                        : 'text-white/30 cursor-not-allowed'
-                    }`}
-                    title="Инструмент для выделения областей"
-                    style={{ marginLeft: '6px' }}
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                      />
-                    </svg>
-                    Выделить
-                  </button>
                 </div>
               </div>
             ) : (
@@ -1003,88 +1001,9 @@ export default function AnalysisHistoryContents({
             )}
           </div>
 
-          {/* Панель результатов — не сжимает фото, прокручивается отдельно */}
-          {viewMode === "result" && (hasDetections || selectedImageForView?.summary?.report) && (
-            <div className="shrink-0 w-full max-h-[38vh] min-h-0 overflow-y-auto flex flex-col gap-4">
-            {hasDetections ? (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
-                transition={{ duration: 0.3 }}
-                className="w-full shrink-0"
-              >
-                <div
-                  className="flex gap-4 border border-solid border-white/20 rounded-[14px] p-[8px] overflow-x-auto"
-                  style={{
-                    scrollbarWidth: 'thin',
-                    scrollbarColor: 'rgba(255, 255, 255, 0.3) transparent',
-                    WebkitOverflowScrolling: 'touch',
-                  }}
-                >
-                {/* Все детекции (автоматические и ручные) - используем MetricsCard */}
-                {selectedImageForView.summary?.detections && (() => {
-                  const detections = selectedImageForView.summary.detections;
-
-                  // Преобразуем детекции в формат метрик
-                  const metrics = detections.map((detection: any, sourceIndex: number) => {
-                    const defectSummary = detection.defect_summary || {};
-                    let defectType = 'normal';
-                    if (defectSummary.type && defectSummary.type !== 'Норма') {
-                      defectType = defectSummary.type.toLowerCase().includes('повреж') ? 'damage' : 'missing';
-                    }
-
-                    return {
-                      sourceIndex,
-                      detection_id: detection.detection_id,
-                      class_name: detection.class || '',
-                      class_name_ru: detection.class_ru || detection.class || '',
-                      confidence: detection.confidence || 0,
-                      bbox: detection.bbox || [],
-                      defect_type: defectType,
-                      severity: defectSummary.severity,
-                      description: defectSummary.description,
-                      is_manual: detection.is_manual || false
-                    };
-                  });
-
-                  return metrics;
-                })().slice()
-                  .sort((a, b) => {
-                    // Сортировка: сначала дефекты, потом обычные объекты
-                    const isDefectA = a.defect_type && a.defect_type !== 'normal' && a.severity !== 'none' && a.severity !== null;
-                    const isDefectB = b.defect_type && b.defect_type !== 'normal' && b.severity !== 'none' && b.severity !== null;
-
-                    if (isDefectA && !isDefectB) return -1;
-                    if (!isDefectA && isDefectB) return 1;
-
-                    // Внутри дефектов: критические первые, потом предупреждения
-                    if (isDefectA && isDefectB) {
-                      const isCriticalA = a.severity === 'high' || a.severity === 'критическая';
-                      const isCriticalB = b.severity === 'high' || b.severity === 'критическая';
-
-                      if (isCriticalA && !isCriticalB) return -1;
-                      if (!isCriticalA && isCriticalB) return 1;
-                    }
-
-                    return 0;
-                  })
-                  .map((metric, index) => (
-                    <div
-                      key={`metric-${metric.sourceIndex}-${index}`}
-                      onMouseEnter={() => setHighlightedMetricIndex(metric.sourceIndex)}
-                      onMouseLeave={() => setHighlightedMetricIndex(null)}
-                    >
-                      <MetricsCard metric={metric} index={index} />
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            ) : null}
-
-          {/* Карточка анализа (6 блоков) */}
+          {/* Карточка анализа (6 блоков) — основной акцент */}
           {selectedImageForView?.summary?.report && (
-            <div className="w-full shrink-0 border border-white/20 rounded-[14px] bg-white/5 backdrop-blur-sm p-4">
+            <div className="flex-1 min-h-0 w-full overflow-y-auto border border-white/20 rounded-[14px] bg-white/5 backdrop-blur-sm p-4 md:p-5">
               <p className="font-bold text-lg mb-3">Карточка анализа</p>
 
               {(() => {
@@ -1190,34 +1109,19 @@ export default function AnalysisHistoryContents({
               })()}
             </div>
           )}
-            </div>
-          )}
         </div>
           </div>
 
-        {/* Компонент аннотации - рендерится поверх всего */}
-        {isAnnotationMode && taskId && annotationImageUrl && selectedImageForView && (
-          <ImageAnnotationTool
-            imageUrl={annotationImageUrl}
-            imageId={selectedImageForView.id}
-            taskId={taskId}
-            fileId={selectedImageForView.result_file_id || selectedImageForView.file_id}
-            projectId={taskId}
-            existingDetections={selectedImageForView.summary?.detections || []}
-            onClose={() => setIsAnnotationMode(false)}
-            onSave={() => {
-              // После сохранения можно обновить изображение
-              setIsAnnotationMode(false);
-              // Можно добавить обновление данных изображения
-            }}
-            onImageUpdated={() => {
-              // Обновляем данные изображения после сохранения аннотации
-              if (onImageUpdated) {
-                onImageUpdated();
-              }
-            }}
+        {currentImageUrl ? (
+          <DefectResultModal
+            isOpen={isResultModalOpen}
+            onClose={() => setIsResultModalOpen(false)}
+            imageUrl={currentImageUrl}
+            fileName={selectedImageForView.file_name}
+            detections={detectionsForOverlay}
           />
-        )}
+        ) : null}
+
       </>
     );
   }

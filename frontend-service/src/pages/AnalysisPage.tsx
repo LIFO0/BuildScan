@@ -310,28 +310,6 @@ export default function AnalysisPage() {
                 setTaskImages((prevImages) => prevImages.filter((img) => img.id !== imageId));
                 setTaskImagesTotal((prev) => prev - 1);
               }}
-              onImageUpdated={async () => {
-                // Обновляем только конкретное изображение без полной перезагрузки
-                if (taskId) {
-                  try {
-                    const imagesResponse = await apiClient.get(`/analysis/tasks/${taskId}/images`, {
-                      params: {
-                        skip: 0,
-                        limit: 50,
-                        include_thumbnails: true,
-                      },
-                    });
-                    const imagesData = imagesResponse.data as {
-                      images: TaskImageResponse[];
-                      total: number;
-                    };
-                    setTaskImages(imagesData?.images || []);
-                    setTaskImagesTotal(imagesData?.total || 0);
-                  } catch (err) {
-                    console.error("Error updating image data:", err);
-                  }
-                }
-              }}
               onViewModeChange={setIsViewingImage}
             />
           ) : null
