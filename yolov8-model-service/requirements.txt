@@ -10,10 +10,11 @@ ultralytics>=8.3.0
 torch==2.6.0+cu124
 torchvision==0.21.0+cu124
 requests>=2.31.0
-# NOTE: Zero-shot VLM fallback is disabled by default in this repo because
-# Python 3.14 on Windows often has no prebuilt wheels for tokenizers/safetensors,
-# causing very slow or failing installs. For maximum quality, use a dedicated
-# building-damage model (YOLO weights) trained on the target classes.
+# CLIP (transformers) — проверка «фасад здания vs прочее» перед детекцией дефектов.
+# На части сред (Python 3.14 / Windows) установка может потребовать свежие wheels;
+# сервис работает и без неё, с ограниченным fallback по пустым детекциям.
+transformers>=4.45.0
+# NOTE: For maximum defect quality, use a dedicated building-damage YOLO (.pt).
 # Поддержка RAW форматов дронов
 rawpy>=0.19.0
 imageio>=2.31.0

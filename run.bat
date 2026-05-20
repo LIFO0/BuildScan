@@ -52,18 +52,18 @@ if errorlevel 1 goto :fatal
 
 if /i "%CMD%"=="frontend" (
   set "FE=%ROOT%frontend-service"
-  start "LineGuard Frontend" cmd /k "cd /d ""%FE%"" ^& npm run dev -- --host 127.0.0.1 --port 5173"
+  start "LineGuard Frontend" /D "%FE%" cmd /k npm run dev -- --host 127.0.0.1 --port 5173
   exit /b 0
 )
 if /i "%CMD%"=="django" (
   set "BE=%ROOT%backend-django"
-  start "LineGuard Django API" cmd /k "cd /d ""%BE%"" ^& .\.venv\Scripts\uvicorn.exe lineguard.asgi:application --host 127.0.0.1 --port 8000"
+  start "LineGuard Django API" /D "%BE%" cmd /k .venv\Scripts\uvicorn.exe lineguard.asgi:application --host 127.0.0.1 --port 8000
   exit /b 0
 )
 if /i "%CMD%"=="yolo" (
   set "YO=%ROOT%yolov8-model-service"
   set "MODEL=%ROOT%models\best.pt"
-  start "LineGuard YOLOv8 Service" cmd /k "cd /d ""%YO%"" ^& set ""MODEL_PATH=%MODEL%"" ^& set ""PORT=8001"" ^& .\.venv\Scripts\python.exe -m app.main"
+  start "LineGuard YOLOv8 Service" /D "%YO%" cmd /k set "MODEL_PATH=%MODEL%" ^& set "PORT=8001" ^& .venv\Scripts\python.exe -m app.main
   exit /b 0
 )
 
@@ -73,16 +73,18 @@ set "BE=%ROOT%backend-django"
 set "YO=%ROOT%yolov8-model-service"
 set "MODEL=%ROOT%models\best.pt"
 
-start "LineGuard Frontend" cmd /k "cd /d ""%FE%"" ^& npm run dev -- --host 127.0.0.1 --port 5173"
-start "LineGuard Django API" cmd /k "cd /d ""%BE%"" ^& .\.venv\Scripts\uvicorn.exe lineguard.asgi:application --host 127.0.0.1 --port 8000"
-start "LineGuard YOLOv8 Service" cmd /k "cd /d ""%YO%"" ^& set ""MODEL_PATH=%MODEL%"" ^& set ""PORT=8001"" ^& .\.venv\Scripts\python.exe -m app.main"
+start "LineGuard Frontend" /D "%FE%" cmd /k npm run dev -- --host 127.0.0.1 --port 5173
+start "LineGuard Django API" /D "%BE%" cmd /k .venv\Scripts\uvicorn.exe lineguard.asgi:application --host 127.0.0.1 --port 8000
+start "LineGuard YOLOv8 Service" /D "%YO%" cmd /k set "MODEL_PATH=%MODEL%" ^& set "PORT=8001" ^& .venv\Scripts\python.exe -m app.main
 
 echo.
 call :ok   "Started."
-call :info "Open:"
+call :info "Open in browser (not plain http://localhost - use port 5173):"
 echo   UI   : http://127.0.0.1:5173
 echo   API  : http://127.0.0.1:8000/api/health
 echo   YOLO : http://127.0.0.1:8001/health
+echo.
+call :warn "Keep the three titled cmd windows open (Frontend / Django / YOLO). Closing them stops the app - browser will show ERR_CONNECTION_REFUSED."
 echo.
 exit /b 0
 
@@ -101,16 +103,11 @@ exit /b 0
 :pick_python
 set "PY_LAUNCH="
 py -3.14 -c "import sys; assert sys.version_info[:2]==(3,14)" >nul 2>nul
-if "%errorlevel%"=="0" set "PY_LAUNCH=py -3.14"
-if not defined PY_LAUNCH (
-  py -3.12 -c "import sys; assert sys.version_info[:2]==(3,12)" >nul 2>nul
-  if "%errorlevel%"=="0" set "PY_LAUNCH=py -3.12"
+if errorlevel 1 (
+  call :err "Python 3.14 is required. Install Python 3.14 and ensure 'py -3.14' works."
+  exit /b 1
 )
-if not defined PY_LAUNCH (
-  py -3.11 -c "import sys; assert sys.version_info[:2]==(3,11)" >nul 2>nul
-  if "%errorlevel%"=="0" set "PY_LAUNCH=py -3.11"
-)
-if not defined PY_LAUNCH set "PY_LAUNCH=py"
+set "PY_LAUNCH=py -3.14"
 exit /b 0
 
 :frontend_deps
@@ -196,18 +193,18 @@ exit /b %rc%
 
 :start_frontend
 set "FE=%ROOT%frontend-service"
-start "LineGuard Frontend" cmd /k "cd /d ""%FE%"" ^& npm run dev -- --host 127.0.0.1 --port 5173"
+start "LineGuard Frontend" /D "%FE%" cmd /k npm run dev -- --host 127.0.0.1 --port 5173
 exit /b 0
 
 :start_django
 set "BE=%ROOT%backend-django"
-start "LineGuard Django API" cmd /k "cd /d ""%BE%"" ^& .\.venv\Scripts\uvicorn.exe lineguard.asgi:application --host 127.0.0.1 --port 8000"
+start "LineGuard Django API" /D "%BE%" cmd /k .venv\Scripts\uvicorn.exe lineguard.asgi:application --host 127.0.0.1 --port 8000
 exit /b 0
 
 :start_yolo
 set "YO=%ROOT%yolov8-model-service"
 set "MODEL=%ROOT%models\best.pt"
-start "LineGuard YOLOv8 Service" cmd /k "cd /d ""%YO%"" ^& set ""MODEL_PATH=%MODEL%"" ^& set ""PORT=8001"" ^& .\.venv\Scripts\python.exe -m app.main"
+start "LineGuard YOLOv8 Service" /D "%YO%" cmd /k set "MODEL_PATH=%MODEL%" ^& set "PORT=8001" ^& .venv\Scripts\python.exe -m app.main
 exit /b 0
 
 :stop_ports

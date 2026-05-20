@@ -1,9 +1,21 @@
 from __future__ import annotations
 
+import logging
+import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 from PIL import Image
+
+logger = logging.getLogger(__name__)
+
+# Промпты для zero-shot: первый — «наш» домен, остальные — типичные «не фасад».
+BUILDING_SCENE_LABELS: List[str] = [
+    "фото крупного плана наружного фасада или несущей стены здания для осмотра дефектов",
+    "фото природы, неба, леса, поля или животных без здания",
+    "фото транспорта, дороги или парковки без доминирующего фасада здания",
+    "фото интерьера комнаты, еды, людей или мелких предметов не как фрагмент стены здания",
+]
 
 
 @dataclass(frozen=True)
@@ -46,6 +58,71 @@ def get_assessor() -> ClipZeroShotAssessor:
     if _assessor is None:
         _assessor = ClipZeroShotAssessor()
     return _assessor
+
+
+_MSG_NOT_BUILDING_CLIP = (
+    "На фотографии не здание (или не фрагмент наружного фасада / несущей стены для данного анализа)."
+)
+_MSG_NOT_BUILDING_FALLBACK = (
+    "На фотографии, скорее всего, нет фасада здания для анализа: детектор не нашёл "
+    "признаков целевых элементов. Загрузите крупный план стены или фасада."
+)
+
+
+def assess_building_scene(image: Image.Image) -> Dict[str, Any]:
+    """
+    Определяет, относится ли снимок к домену «фасад/стена здания» (zero-shot CLIP).
+    При недоступности transformers возвращает skipped=True — вызывающий код
+    может использовать fallback (например, по пустым детекциям YOLO).
+    """
+    if os.getenv("DISABLE_CLIP_SCENE", "").strip().lower() in ("1", "true", "yes", "on"):
+        return {
+            "skipped": True,
+            "is_building_facade": None,
+            "message_ru": "",
+            "method": "disabled",
+        }
+
+    try:
+        assessor = get_assessor()
+    except Exception as e:
+        logger.warning("CLIP scene check unavailable: %s", e)
+        return {
+            "skipped": True,
+            "is_building_facade": None,
+            "message_ru": "",
+            "method": "unavailable",
+            "error": str(e),
+        }
+
+    ranked = assessor.rank(image, BUILDING_SCENE_LABELS)
+    pos = BUILDING_SCENE_LABELS[0]
+    top0 = ranked[0]
+    top1 = ranked[1] if len(ranked) > 1 else top0
+
+    is_building = top0.label == pos
+    if not is_building and top1.label == pos and top1.score >= top0.score - 0.07:
+        is_building = True
+
+    if is_building:
+        s_pos = top0.score if top0.label == pos else (top1.score if top1.label == pos else top0.score)
+        return {
+            "skipped": False,
+            "is_building_facade": True,
+            "message_ru": "",
+            "method": "clip",
+            "confidence": float(s_pos),
+            "top_label": top0.label,
+        }
+
+    return {
+        "skipped": False,
+        "is_building_facade": False,
+        "message_ru": _MSG_NOT_BUILDING_CLIP,
+        "method": "clip",
+        "confidence": float(top0.score),
+        "top_label": top0.label,
+    }
 
 
 def assess_damage_and_context(image: Image.Image) -> Dict[str, Any]:
